@@ -1,31 +1,33 @@
-import streamlit as st
-import pandas as pd
-import duckdb
+# pylint: disable = missing-module-docstring
 import io
 
-csv="""
-beverages, price
+import duckdb
+import pandas as pd
+import streamlit as st
+
+CSV = """
+beverage, price
 orange_juice, 2.5
 Expresso, 2
 Tea, 3
 """
-beverages=pd.read_csv(io.StringIO(csv))
+beverages = pd.read_csv(io.StringIO(CSV))
 
 
-csv2="""
-food_items, food_prices
+CSV2 = """
+food_item, food_price
 cookie, 2.5
 chocolatine, 2
 muffin, 3
 """
-food_items=pd.read_csv(io.StringIO(csv2))
+food_items = pd.read_csv(io.StringIO(CSV2))
 
-answer="""
+ANSWER_STR = """
 SELECT * FROM beverages
 CROSS JOIN food_items
 """
 
-solution = duckdb.sql(answer).df()
+solution_df = duckdb.sql(ANSWER_STR).df()
 
 with st.sidebar:
     option = st.selectbox(
@@ -43,7 +45,20 @@ if query:
     result = duckdb.sql(query).df()
     st.dataframe(result)
 
-tab2, tab3 = st.tabs(["Tables","Solution"])
+    try:
+        result = result[solution_df.columns]
+        st.dataframe(result.compare(solution_df))
+    except KeyError as e:
+        st.write("some columns are missing")
+
+    n_lines_difference = result.shape[0] - solution_df.shape[0]
+    if n_lines_difference != 0:
+        st.write(
+            f"result has a {n_lines_difference} lines different with the solution_df"
+        )
+
+
+tab2, tab3 = st.tabs(["Tables", "Solution"])
 
 
 with tab2:
@@ -52,7 +67,7 @@ with tab2:
     st.write("table: food_items")
     st.dataframe(food_items)
     st.write("expected:")
-    st.dataframe(solution)
+    st.dataframe(solution_df)
 
 with tab3:
-    st.write(answer)
+    st.write(ANSWER_STR)
