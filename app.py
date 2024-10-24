@@ -5,7 +5,7 @@ import ast
 
 con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
-#solution_df = duckdb.sql(ANSWER_STR).df()
+# solution_df = duckdb.sql(ANSWER_STR).df()
 
 with st.sidebar:
     theme = st.selectbox(
@@ -55,4 +55,3 @@ with tab3:
     with open(f"answers/{exercise_name}.sql", "r") as f:
         answer = f.read()
     st.write(answer)
-
