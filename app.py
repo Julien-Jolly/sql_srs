@@ -72,15 +72,27 @@ def get_exercise():
             answer = f.read()
 
         solution_df = con.execute(answer).df()
+        return exercise_name
 
 
-get_exercise()
+exercise_name = get_exercise()
 
 st.header("enter your code:")
 query = st.text_area(label="votre code SQL ici", key="user_input")
 
 if query:
     check_users_solution(query)
+
+
+for n_days in [2, 7, 23]:
+    if st.button(f"revoir dans {n_days} jours"):
+        next_review = date.today() + timedelta(days=n_days)
+        con.execute(f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'")
+        st.rerun()
+
+if st.button('Reset'):
+    con.execute(f"UPDATE memory_state SET last_reviewed = '1970-01-01'")
+    st.rerun()
 
 
 tab2, tab3 = st.tabs(["Tables", "Solution"])
