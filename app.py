@@ -28,9 +28,22 @@ with st.sidebar:
     )
     st.write("You selected:", theme)
 
-    exercise = con.execute(f"SELECT * FROM memory_state WHERE theme = '{theme}'").df().sort_values("last_reviewed")
-    st.write(exercise)
+    if theme:
+        st.write(f"You selected: {theme}")
+        select_exercise_query = f"SELECT * FROM memory_state WHERE theme = '{theme}'"
+    else:
+        select_exercise_query = f"SELECT * FROM memory_state"
 
+    exercise = (
+        con.execute("SELECT * FROM memory_state")
+        .df()
+        .sort_values("last_reviewed")
+    )
+
+
+
+
+    st.write(exercise)
     exercise_name = exercise.iloc[0]["exercise_name"]
     with open(f"answers/{exercise_name}.sql", "r") as f:
         answer = f.read()
