@@ -1,5 +1,6 @@
 # pylint: disable = missing-module-docstring
 import duckdb
+
 import streamlit as st
 import os
 import logging
