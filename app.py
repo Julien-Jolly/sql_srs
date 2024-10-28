@@ -77,7 +77,9 @@ def get_exercise():
 
 exercise_name = get_exercise()
 
-st.header("enter your code:")
+question = exercise.iloc[0]["question"]
+st.header(question)
+
 query = st.text_area(label="votre code SQL ici", key="user_input")
 
 if query:

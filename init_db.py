@@ -14,6 +14,7 @@ data = {
     "exercise_name": ["beverages_and_food", "sizes_and_trademarks", "customers_and_orders"],
     "tables": [["beverages", "food_items"], ["sizes", "trademarks"], ["orders_data", "customers_data", "products_data", "order_details_data"]],
     "last_reviewed": ["1980-01-01", "1970-01-01", "1970-01-01"],
+    "question": ["faire un cross-join sur les 2 tables", "faire un cross-join sur les 2 tables", "inner join pour rassembler les commandes avec les détails"]
 }
 memory_state_df = pd.DataFrame(data)
 con.execute("CREATE OR REPLACE TABLE memory_state AS SELECT * FROM memory_state_df")
