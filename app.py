@@ -7,182 +7,168 @@
 # pylint: disable = missing-module-docstring
 import duckdb
 import streamlit as st
+from streamlit_scroll_navigation import scroll_navbar
 import os
 import logging
-import bcrypt
-import json
-from pathlib import Path
 from datetime import date, timedelta
+import pandas as pd
 
-# Chemin pour le fichier JSON des utilisateurs
-USER_FILE = Path("users.json")
-
-# Charger les utilisateurs existants depuis un fichier JSON
-def load_users():
-    if USER_FILE.exists():
-        with open(USER_FILE, "r") as file:
-            return json.load(file)
-    return {}
-
-# Sauvegarder les utilisateurs dans un fichier JSON
-def save_users(users):
-    with open(USER_FILE, "w") as file:
-        json.dump(users, file)
-
-# Hacher un mot de passe
-def hash_password(password):
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-# Vérifier un mot de passe
-def verify_password(password, hashed):
-    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-
-# Page de connexion
-def login_page():
-    st.title("Connexion")
-    username = st.text_input("Nom d'utilisateur")
-    password = st.text_input("Mot de passe", type="password")
-    if st.button("Se connecter"):
-        users = load_users()
-        if username in users and verify_password(password, users[username]["password"]):
-            st.success(f"Bienvenue, {username}!")
-            st.session_state["authenticated"] = True
-            st.session_state["username"] = username
-            st.rerun()
-        else:
-            st.error("Nom d'utilisateur ou mot de passe incorrect.")
-
-# Page de création d'utilisateur
-def create_user_page():
-    st.title("Créer un utilisateur")
-    username = st.text_input("Nom d'utilisateur")
-    password = st.text_input("Mot de passe", type="password")
-    confirm_password = st.text_input("Confirmez le mot de passe", type="password")
-
-    if st.button("Créer un compte"):
-        users = load_users()
-        if username in users:
-            st.error("Ce nom d'utilisateur existe déjà.")
-        elif password != confirm_password:
-            st.error("Les mots de passe ne correspondent pas.")
-        else:
-            hashed_password = hash_password(password)
-            users[username] = {"password": hashed_password}
-            save_users(users)
-            st.success("Utilisateur créé avec succès ! Vous pouvez maintenant vous connecter.")
-            st.rerun()
-
-# Initialisation
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-    st.session_state["username"] = None
-
-if not st.session_state["authenticated"]:
-    page = st.sidebar.radio("Navigation", ["Connexion", "Créer un utilisateur"])
-    if page == "Connexion":
-        login_page()
-    elif page == "Créer un utilisateur":
-        create_user_page()
-else:
-    # Code principal de l'application
+# Initialisation et configuration
+def initialize_environment():
+    """Crée le dossier et initialise la base de données si nécessaire."""
     if "data" not in os.listdir():
         logging.error(os.listdir())
-        logging.error("creating folder data")
+        logging.error("Creating folder: data")
         os.mkdir("data")
 
     if "exercises_sql_tables.duckdb" not in os.listdir("data"):
         exec(open("init_db.py").read())
 
-    con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
+    return duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
-    def check_users_solution(user_query: str) -> None:
-        """
-        check that user query is correct by
-        1. checking the columns
-        2. checking the values
-        :param user_query: a string containing the query inserted by user
-        """
+# Chargement d'un exercice
+def get_exercise(con):
+    """Charge un exercice basé sur le thème sélectionné."""
+    themes = con.execute("SELECT DISTINCT theme FROM memory_state").df()
+    theme = st.sidebar.selectbox(
+        "Quel thème souhaitez-vous réviser ?",
+        themes["theme"].unique(),
+        index=None,
+        placeholder="Sélectionnez un thème...",
+    )
+
+    # Construire la requête pour charger les exercices
+    query = f"SELECT * FROM memory_state WHERE theme = '{theme}'" if theme else "SELECT * FROM memory_state"
+    exercises = con.execute(query).df().sort_values("last_reviewed")
+
+    # Charger la réponse associée à l'exercice
+    exercise_name = exercises.iloc[0]["exercise_name"]
+    with open(f"answers/{exercise_name}.sql", "r") as file:
+        answer = file.read()
+
+    solution_df = con.execute(answer).df()
+    return exercises, exercises.iloc[0], exercise_name, answer, solution_df
+
+# Vérification de la solution utilisateur
+def check_users_solution(con, user_query, solution_df):
+    """
+    Vérifie que la requête de l'utilisateur correspond à la solution attendue.
+    """
+    try:
         result = con.execute(user_query).df()
         st.dataframe(result)
-        try:
-            result = result[solution_df.columns]
-            st.dataframe(result.compare(solution_df))
-            if result.compare(solution_df).shape == (0, 0):
-                st.write("Correct !")
-                st.balloons()
-        except KeyError as e:
-            st.write("some columns are missing")
-        n_lines_difference = result.shape[0] - solution_df.shape[0]
-        if n_lines_difference != 0:
-            st.write(
-                f"result has a {n_lines_difference} lines different with the solution_df"
-            )
 
-    def get_exercise():
-        global exercise, answer, solution_df
-        with st.sidebar:
-            available_themes_df = con.execute(
-                "SELECT DISTINCT theme FROM memory_state"
-            ).df()
-            theme = st.selectbox(
-                "What would you like to review ?",
-                available_themes_df["theme"].unique(),
-                index=None,
-                placeholder="Select a theme...",
-            )
+        # Vérification des colonnes et comparaison des résultats
+        result = result[solution_df.columns]
+        differences = result.compare(solution_df)
 
-            if theme:
-                st.write(f"You selected: {theme}")
-                select_exercise_query = (
-                    f"SELECT * FROM memory_state WHERE theme = '{theme}'"
-                )
-            else:
-                select_exercise_query = f"SELECT * FROM memory_state"
+        if differences.shape == (0, 0):
+            st.success("Correct !")
+            st.balloons()
+        else:
+            st.error("Des différences existent avec la solution.")
+            st.dataframe(differences)
+    except KeyError:
+        st.error("Certaines colonnes sont manquantes ou incorrectes.")
 
-            exercise = (
-                con.execute(select_exercise_query).df().sort_values("last_reviewed")
-            )
-
-            st.write(exercise)
-            exercise_name = exercise.iloc[0]["exercise_name"]
-            with open(f"answers/{exercise_name}.sql", "r") as f:
-                answer = f.read()
-
-            solution_df = con.execute(answer).df()
-            return exercise_name
-
-    exercise_name = get_exercise()
-
-    question = exercise.iloc[0]["question"]
-    st.header(question)
-
-    form = st.form("my_form")
-    query = form.text_area(label="votre code SQL ici", key="user_input")
-    form.form_submit_button("Submit")
-
-    if query:
-        check_users_solution(query)
-
-    for n_days in [2, 7, 21]:
-        if st.button(f"revoir dans {n_days} jours"):
-            next_review = date.today() + timedelta(days=n_days)
+# Gestion des révisions
+def schedule_review(con, exercise_name):
+    """Planifie une prochaine révision."""
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        if st.button("Revoir dans 2 jours"):
+            next_review = date.today() + timedelta(days=2)
             con.execute(
                 f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
             )
             st.rerun()
+    with col2:
+        if st.button("Revoir dans 7 jours"):
+            next_review = date.today() + timedelta(days=7)
+            con.execute(
+                f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
+            )
+            st.rerun()
+    with col3:
+        if st.button("Revoir dans 21 jours"):
+            next_review = date.today() + timedelta(days=21)
+            con.execute(
+                f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
+            )
+            st.rerun()
+    with col4:
+        if st.button("Réinitialiser toutes les dates"):
+            con.execute("UPDATE memory_state SET last_reviewed = '1970-01-01'")
+            st.rerun()
 
-    if st.button("Reset"):
-        con.execute(f"UPDATE memory_state SET last_reviewed = '1970-01-01'")
-        st.rerun()
+# Affichage des tables
+def display_tables(con, exercise):
+    """Affiche les tables liées à l'exercice, avec deux tables par ligne et sans indice."""
+    st.subheader("Tables")
+    tables = exercise["tables"]
 
-    tab2, tab3 = st.tabs(["Tables", "Solution"])
+    # Répartir les tables en lignes de deux colonnes
+    for i in range(0, len(tables), 2):
+        cols = st.columns(2)  # Crée deux colonnes
+        for j, table in enumerate(tables[i:i+2]):  # Parcourt jusqu'à deux tables
+            with cols[j]:  # Place chaque table dans une colonne
+                st.write(f"**Table : {table}**")
+                table_df = con.execute(f"SELECT * FROM {table}").df()
+                st.dataframe(table_df)
 
-    with tab2:
-        exercise_tables = exercise.iloc[0]["tables"]
-        for table in exercise_tables:
-            st.write(f"table: {table}")
-            df_table = con.execute(f"SELECT * FROM {table}").df()
-            st.dataframe(df_table)
+# Affichage de la solution
+def display_solution(solution_query):
+    """Affiche la solution SQL."""
+    st.subheader("Solution")
+    st.text(solution_query)
 
-    with tab3:
-        st.text(answer)
+# Ajout de la sidebar
+def display_sidebar():
+    """Affiche une sidebar avec navigation ancrée."""
+    anchor_ids = ["exercises_list", "tables", "solution"]
+    anchor_icons = ["list", "table", "code"]
+
+    with st.sidebar:
+        st.subheader("Navigation")
+        scroll_navbar(
+            anchor_ids,
+            anchor_labels=["Liste des exercices", "Tables", "Solution"],
+            anchor_icons=anchor_icons
+        )
+
+# Application principale
+def main_app():
+    """Application principale après authentification."""
+    st.title("Système de révision SQL")
+    con = initialize_environment()
+
+    # Charger les exercices et la solution
+    exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
+
+    # Sidebar
+    display_sidebar()
+
+    # Partie supérieure : Titre de la question et boutons
+    with st.container():
+        st.subheader(exercise["question"])  # Affiche la question sélectionnée
+        user_query = st.text_area("Entrez votre requête SQL ici", key="user_input")
+        schedule_review(con, exercise_name)
+
+        if st.button("Valider votre solution"):
+            check_users_solution(con, user_query, solution_df)
+
+    # Partie inférieure : Navigation entre les sections
+    with st.container():
+        st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
+        st.subheader("Liste des exercices")
+        st.dataframe(exercises)
+
+        st.markdown('<div id="tables"></div>', unsafe_allow_html=True)
+        display_tables(con, exercise)
+
+        st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
+        display_solution(answer)
+
+# Exécution de l'application
+if __name__ == "__main__":
+    main_app()
