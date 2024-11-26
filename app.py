@@ -10,10 +10,70 @@ import streamlit as st
 from streamlit_scroll_navigation import scroll_navbar
 import os
 import logging
+import bcrypt
+import json
+from pathlib import Path
 from datetime import date, timedelta
-import pandas as pd
 
 # Initialisation et configuration
+USER_FILE = Path("users.json")
+
+# Charger les utilisateurs existants depuis un fichier JSON
+def load_users():
+    if USER_FILE.exists():
+        with open(USER_FILE, "r") as file:
+            return json.load(file)
+    return {}
+
+# Sauvegarder les utilisateurs dans un fichier JSON
+def save_users(users):
+    with open(USER_FILE, "w") as file:
+        json.dump(users, file)
+
+# Hacher un mot de passe
+def hash_password(password):
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+# Vérifier un mot de passe
+def verify_password(password, hashed):
+    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+
+# Page de connexion
+def login_page():
+    st.title("Connexion")
+    username = st.text_input("Nom d'utilisateur")
+    password = st.text_input("Mot de passe", type="password")
+    if st.button("Se connecter"):
+        users = load_users()
+        if username in users and verify_password(password, users[username]["password"]):
+            st.success(f"Bienvenue, {username}!")
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = username
+            st.rerun()
+        else:
+            st.error("Nom d'utilisateur ou mot de passe incorrect.")
+
+# Page de création d'utilisateur
+def create_user_page():
+    st.title("Créer un utilisateur")
+    username = st.text_input("Nom d'utilisateur")
+    password = st.text_input("Mot de passe", type="password")
+    confirm_password = st.text_input("Confirmez le mot de passe", type="password")
+
+    if st.button("Créer un compte"):
+        users = load_users()
+        if username in users:
+            st.error("Ce nom d'utilisateur existe déjà.")
+        elif password != confirm_password:
+            st.error("Les mots de passe ne correspondent pas.")
+        else:
+            hashed_password = hash_password(password)
+            users[username] = {"password": hashed_password}
+            save_users(users)
+            st.success("Utilisateur créé avec succès ! Vous pouvez maintenant vous connecter.")
+            st.rerun()
+
+
 def initialize_environment():
     """Crée le dossier et initialise la base de données si nécessaire."""
     if "data" not in os.listdir():
@@ -25,6 +85,7 @@ def initialize_environment():
         exec(open("init_db.py").read())
 
     return duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
+
 
 # Chargement d'un exercice
 def get_exercise(con):
@@ -138,36 +199,47 @@ def display_sidebar():
 
 # Application principale
 def main_app():
-    """Application principale après authentification."""
-    st.title("Système de révision SQL")
-    con = initialize_environment()
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = None
 
-    # Charger les exercices et la solution
-    exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
+    if not st.session_state["authenticated"]:
+        page = st.sidebar.radio("Navigation", ["Connexion", "Créer un utilisateur"])
+        if page == "Connexion":
+            login_page()
+        elif page == "Créer un utilisateur":
+            create_user_page()
 
-    # Sidebar
-    display_sidebar()
+    else:
+        st.title("Système de révision SQL")
+        con = initialize_environment()
 
-    # Partie supérieure : Titre de la question et boutons
-    with st.container():
-        st.subheader(exercise["question"])  # Affiche la question sélectionnée
-        user_query = st.text_area("Entrez votre requête SQL ici", key="user_input")
-        schedule_review(con, exercise_name)
+        # Charger les exercices et la solution
+        exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
 
-        if st.button("Valider votre solution"):
-            check_users_solution(con, user_query, solution_df)
+        # Sidebar
+        display_sidebar()
 
-    # Partie inférieure : Navigation entre les sections
-    with st.container():
-        st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
-        st.subheader("Liste des exercices")
-        st.dataframe(exercises)
+        # Partie supérieure : Titre de la question et boutons
+        with st.container():
+            st.subheader(exercise["question"])  # Affiche la question sélectionnée
+            user_query = st.text_area("Entrez votre requête SQL ici", key="user_input")
+            schedule_review(con, exercise_name)
 
-        st.markdown('<div id="tables"></div>', unsafe_allow_html=True)
-        display_tables(con, exercise)
+            if st.button("Valider votre solution"):
+                check_users_solution(con, user_query, solution_df)
 
-        st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
-        display_solution(answer)
+        # Partie inférieure : Navigation entre les sections
+        with st.container():
+            st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
+            st.subheader("Liste des exercices")
+            st.dataframe(exercises)
+
+            st.markdown('<div id="tables"></div>', unsafe_allow_html=True)
+            display_tables(con, exercise)
+
+            st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
+            display_solution(answer)
 
 # Exécution de l'application
 if __name__ == "__main__":
