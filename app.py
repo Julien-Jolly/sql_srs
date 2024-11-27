@@ -14,6 +14,7 @@ import bcrypt
 import json
 from pathlib import Path
 from datetime import date, timedelta
+import pandas as pd
 
 # Initialisation et configuration
 USER_FILE = Path("users.json")
@@ -102,6 +103,14 @@ def get_exercise(con):
     query = f"SELECT * FROM memory_state WHERE theme = '{theme}'" if theme else "SELECT * FROM memory_state"
     exercises = con.execute(query).df().sort_values("last_reviewed")
 
+    # Convertir `last_reviewed` en datetime
+    exercises["last_reviewed"] = pd.to_datetime(exercises["last_reviewed"])
+
+    # Vérifier si toutes les dates de révision sont au-delà d'aujourd'hui
+    today = pd.Timestamp(date.today())  # Convertir `date.today()` en format compatible
+    if (exercises["last_reviewed"] > today).all():
+        return None, None, None, None, None
+
     # Charger la réponse associée à l'exercice
     exercise_name = exercises.iloc[0]["exercise_name"]
     with open(f"answers/{exercise_name}.sql", "r") as file:
@@ -109,6 +118,12 @@ def get_exercise(con):
 
     solution_df = con.execute(answer).df()
     return exercises, exercises.iloc[0], exercise_name, answer, solution_df
+
+
+
+def reset_input(key):
+    if key in st.session_state:
+        st.session_state[key] = ""
 
 # Vérification de la solution utilisateur
 def check_users_solution(con, user_query, solution_df):
@@ -126,6 +141,7 @@ def check_users_solution(con, user_query, solution_df):
         if differences.shape == (0, 0):
             st.success("Correct !")
             st.balloons()
+            reset_input(user_query)  # Réinitialise après validation
         else:
             st.error("Des différences existent avec la solution.")
             st.dataframe(differences)
@@ -136,27 +152,28 @@ def check_users_solution(con, user_query, solution_df):
 def schedule_review(con, exercise_name):
     """Planifie une prochaine révision."""
     col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("Revoir dans 2 jours"):
-            next_review = date.today() + timedelta(days=2)
-            con.execute(
-                f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
-            )
-            st.rerun()
-    with col2:
-        if st.button("Revoir dans 7 jours"):
-            next_review = date.today() + timedelta(days=7)
-            con.execute(
-                f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
-            )
-            st.rerun()
-    with col3:
-        if st.button("Revoir dans 21 jours"):
-            next_review = date.today() + timedelta(days=21)
-            con.execute(
-                f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
-            )
-            st.rerun()
+    if exercise_name != "all":
+        with col1:
+            if st.button("Revoir dans 2 jours"):
+                next_review = date.today() + timedelta(days=2)
+                con.execute(
+                    f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
+                )
+                st.rerun()
+        with col2:
+            if st.button("Revoir dans 7 jours"):
+                next_review = date.today() + timedelta(days=7)
+                con.execute(
+                    f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
+                )
+                st.rerun()
+        with col3:
+            if st.button("Revoir dans 21 jours"):
+                next_review = date.today() + timedelta(days=21)
+                con.execute(
+                    f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
+                )
+                st.rerun()
     with col4:
         if st.button("Réinitialiser toutes les dates"):
             con.execute("UPDATE memory_state SET last_reviewed = '1970-01-01'")
@@ -217,29 +234,34 @@ def main_app():
         # Charger les exercices et la solution
         exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
 
-        # Sidebar
-        display_sidebar()
+        if exercise is None:
+            # Cas où aucune révision n'est disponible pour aujourd'hui
+            st.info("Vous n'avez pas de requête à réviser aujourd'hui, mais vous pouvez réinitialiser les dates pour reprendre au début.")
+            schedule_review(con, "all")  # Ajouter un bouton pour réinitialiser toutes les dates
+        else:
+            # Sidebar
+            display_sidebar()
 
-        # Partie supérieure : Titre de la question et boutons
-        with st.container():
-            st.subheader(exercise["question"])  # Affiche la question sélectionnée
-            user_query = st.text_area("Entrez votre requête SQL ici", key="user_input")
-            schedule_review(con, exercise_name)
+            # Partie supérieure : Titre de la question et boutons
+            with st.container():
+                st.subheader(exercise["question"])  # Affiche la question sélectionnée
+                user_query = st.text_area("Entrez votre requête SQL ici", key="user_input")
+                schedule_review(con, exercise_name)
 
-            if st.button("Valider votre solution"):
-                check_users_solution(con, user_query, solution_df)
+                if st.button("Valider votre solution"):
+                    check_users_solution(con, user_query, solution_df)
 
-        # Partie inférieure : Navigation entre les sections
-        with st.container():
-            st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
-            st.subheader("Liste des exercices")
-            st.dataframe(exercises)
+            # Partie inférieure : Navigation entre les sections
+            with st.container():
+                st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
+                st.subheader("Liste des exercices")
+                st.dataframe(exercises)
 
-            st.markdown('<div id="tables"></div>', unsafe_allow_html=True)
-            display_tables(con, exercise)
+                st.markdown('<div id="tables"></div>', unsafe_allow_html=True)
+                display_tables(con, exercise)
 
-            st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
-            display_solution(answer)
+                st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
+                display_solution(answer)
 
 # Exécution de l'application
 if __name__ == "__main__":
