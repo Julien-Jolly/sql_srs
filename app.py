@@ -8,71 +8,90 @@
 import duckdb
 import streamlit as st
 from streamlit_scroll_navigation import scroll_navbar
-import os
-import logging
-import bcrypt
-import json
-from pathlib import Path
 from datetime import date, timedelta
+import logging
+import os
 import pandas as pd
+from auth import create_account, verify_password, send_reset_email, load_users, verify_reset_code, hash_password, save_users
 
-# Initialisation et configuration
-USER_FILE = Path("users.json")
+logging.basicConfig(level=logging.INFO)
 
-# Charger les utilisateurs existants depuis un fichier JSON
-def load_users():
-    if USER_FILE.exists():
-        with open(USER_FILE, "r") as file:
-            return json.load(file)
-    return {}
-
-# Sauvegarder les utilisateurs dans un fichier JSON
-def save_users(users):
-    with open(USER_FILE, "w") as file:
-        json.dump(users, file)
-
-# Hacher un mot de passe
-def hash_password(password):
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-# Vérifier un mot de passe
-def verify_password(password, hashed):
-    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-
-# Page de connexion
 def login_page():
-    st.title("Connexion")
+    st.title("Page de connexion")
+
     username = st.text_input("Nom d'utilisateur")
     password = st.text_input("Mot de passe", type="password")
+
     if st.button("Se connecter"):
-        users = load_users()
-        if username in users and verify_password(password, users[username]["password"]):
-            st.success(f"Bienvenue, {username}!")
-            st.session_state["authenticated"] = True
-            st.session_state["username"] = username
+        if verify_password(username, password):
+            st.success("Bienvenue, vous êtes connecté !")
+            st.session_state['username'] = username
+            st.session_state['authenticated'] = True
             st.rerun()
         else:
             st.error("Nom d'utilisateur ou mot de passe incorrect.")
 
-# Page de création d'utilisateur
-def create_user_page():
-    st.title("Créer un utilisateur")
+def create_account_page():
+    st.title("Créer un compte")
+
     username = st.text_input("Nom d'utilisateur")
     password = st.text_input("Mot de passe", type="password")
-    confirm_password = st.text_input("Confirmez le mot de passe", type="password")
+    email = st.text_input("Email")
 
-    if st.button("Créer un compte"):
-        users = load_users()
-        if username in users:
-            st.error("Ce nom d'utilisateur existe déjà.")
-        elif password != confirm_password:
-            st.error("Les mots de passe ne correspondent pas.")
+    if st.button("Créer le compte"):
+        if create_account(username, password, email):
+            st.success("Compte créé avec succès ! Vous pouvez maintenant vous connecter.")
         else:
-            hashed_password = hash_password(password)
-            users[username] = {"password": hashed_password}
+            st.error("Un compte avec ce nom d'utilisateur existe déjà.")
+
+def forgot_password_page():
+    st.title("Mot de passe oublié")
+
+    email = st.text_input("Entrez votre email")
+    reset_code = st.text_input("Entrez le code de réinitialisation envoyé par email")
+
+    if st.button("Envoyer un code de réinitialisation"):
+        users = load_users()
+        user_found = False
+
+        for username, user_data in users.items():
+            if user_data["email"] == email:
+                send_reset_email(email, username)  # Envoi du code de réinitialisation
+                user_found = True
+                st.success(f"Un code de réinitialisation a été envoyé à {email}.")
+                break
+
+        if not user_found:
+            st.error("Aucun utilisateur trouvé avec cet email.")
+
+    # Vérification du code et réinitialisation du mot de passe
+    if reset_code:
+        new_password = st.text_input("Nouveau mot de passe", type="password")
+        confirm_password = st.text_input("Confirmer le mot de passe", type="password")
+
+        if st.button("Réinitialiser le mot de passe"):
+            if new_password == confirm_password:
+                if verify_reset_code(reset_code, email):  # Vérifie le code de réinitialisation
+                    if reset_user_password(email, new_password):
+                        st.success("Mot de passe réinitialisé avec succès.")
+                    else:
+                        st.error("Erreur lors de la réinitialisation du mot de passe.")
+                else:
+                    st.error("Code de réinitialisation invalide.")
+            else:
+                st.error("Les mots de passe ne correspondent pas.")
+
+def reset_user_password(email, new_password):
+    """Réinitialise le mot de passe de l'utilisateur."""
+    users = load_users()
+    for username, user_data in users.items():
+        if user_data["email"] == email:
+            hashed_password = hash_password(new_password)
+            users[username]["password"] = hashed_password
             save_users(users)
-            st.success("Utilisateur créé avec succès ! Vous pouvez maintenant vous connecter.")
-            st.rerun()
+            return True
+    return False
+
 
 
 def initialize_environment():
@@ -86,6 +105,41 @@ def initialize_environment():
         exec(open("init_db.py").read())
 
     return duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
+
+
+def reset_password_page(token, username):
+    """
+    Page de réinitialisation de mot de passe.
+    Vérifie le token, puis permet à l'utilisateur de saisir un nouveau mot de passe.
+    """
+    st.title("Réinitialisation de mot de passe")
+
+    # Chargement des données utilisateur
+    users_data = load_users()
+
+    # Vérification de la validité du token
+    if username not in users_data or users_data[username].get("reset_token") != token:
+        st.error("Lien invalide ou expiré.")
+        return
+
+    # Formulaire pour saisir un nouveau mot de passe
+    new_password = st.text_input("Nouveau mot de passe", type="password")
+    confirm_password = st.text_input("Confirmez le nouveau mot de passe", type="password")
+
+    if st.button("Réinitialiser le mot de passe"):
+        if not new_password or not confirm_password:
+            st.error("Veuillez remplir tous les champs.")
+        elif new_password != confirm_password:
+            st.error("Les mots de passe ne correspondent pas.")
+        else:
+            # Mise à jour du mot de passe et suppression du token
+            users_data[username]["password"] = hash_password(new_password)
+            users_data[username]["reset_token"] = None  # Supprimer le token après utilisation
+            save_users(users_data)
+
+            st.success("Votre mot de passe a été réinitialisé avec succès.")
+            st.info("Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.")
+
 
 
 # Chargement d'un exercice
@@ -213,45 +267,57 @@ def display_sidebar():
             anchor_labels=["Liste des exercices", "Tables", "Solution"],
             anchor_icons=anchor_icons
         )
+    with st.sidebar:
+        if st.session_state["authenticated"]:
+            # Si l'utilisateur est authentifié, afficher un bouton de déconnexion
+            if st.button("Quitter"):
+                st.session_state["authenticated"] = False
+                st.session_state["username"] = None
+                st.rerun()  # Forcer un rechargement pour afficher la page de connexion
 
 # Application principale
 def main_app():
+    """Fonction principale de l'application."""
+    # Initialisation de l'état d'authentification
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
         st.session_state["username"] = None
 
-    if not st.session_state["authenticated"]:
-        page = st.sidebar.radio("Navigation", ["Connexion", "Créer un utilisateur"])
-        if page == "Connexion":
-            login_page()
-        elif page == "Créer un utilisateur":
-            create_user_page()
+    # Récupération des paramètres d'URL (utile pour les fonctionnalités comme les tokens)
+    query_params = st.query_params
 
-    else:
+    # Gestion des tokens pour la réinitialisation de mot de passe
+    if "token" in query_params and "username" in query_params:
+        token = query_params["token"]
+        username = query_params["username"]
+        reset_password_page(token=token, username=username)
+        return  # On quitte la fonction après avoir affiché la page de réinitialisation
+
+    # Si l'utilisateur est connecté, afficher l'application principale
+    if st.session_state["authenticated"]:
         st.title("Système de révision SQL")
-        con = initialize_environment()
 
-        # Charger les exercices et la solution
+        # Chargement de l'environnement
+        con = initialize_environment()
         exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
 
+        # Si aucun exercice n'est disponible
         if exercise is None:
-            # Cas où aucune révision n'est disponible pour aujourd'hui
-            st.info("Vous n'avez pas de requête à réviser aujourd'hui, mais vous pouvez réinitialiser les dates pour reprendre au début.")
-            schedule_review(con, "all")  # Ajouter un bouton pour réinitialiser toutes les dates
+            st.info("Aucune révision prévue aujourd'hui.")
+            schedule_review(con, "all")  # Permet de réinitialiser les dates de révision
         else:
-            # Sidebar
-            display_sidebar()
+            display_sidebar()  # Barre latérale pour la navigation
 
-            # Partie supérieure : Titre de la question et boutons
+            # Contenu principal : Affichage des exercices
             with st.container():
-                st.subheader(exercise["question"])  # Affiche la question sélectionnée
-                user_query = st.text_area("Entrez votre requête SQL ici", key="user_input")
+                st.subheader(exercise["question"])
+                user_query = st.text_area("Entrez votre requête SQL", key="user_input")
                 schedule_review(con, exercise_name)
 
-                if st.button("Valider votre solution"):
+                if st.button("Valider la solution"):
                     check_users_solution(con, user_query, solution_df)
 
-            # Partie inférieure : Navigation entre les sections
+            # Navigation entre les sections : Exercices, Tables, Solutions
             with st.container():
                 st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
                 st.subheader("Liste des exercices")
@@ -262,6 +328,20 @@ def main_app():
 
                 st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
                 display_solution(answer)
+    else:
+        # Si l'utilisateur n'est pas connecté, afficher les options de connexion
+        st.sidebar.title("Navigation")
+        page = st.sidebar.radio(
+            "Accès à l'application",
+            ["Connexion", "Créer un compte", "Mot de passe oublié"]
+        )
+        if page == "Connexion":
+            login_page()
+        elif page == "Créer un compte":
+            create_account_page()
+        elif page == "Mot de passe oublié":
+            forgot_password_page()
+
 
 # Exécution de l'application
 if __name__ == "__main__":
