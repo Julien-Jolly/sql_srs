@@ -5,11 +5,13 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import json
-import id_mail
+import streamlit as st
 
 
-USERS_FILE = "users.json"
-RESET_CODES_FILE = "reset_codes.json"
+USERS_FILE = "json/users.json"
+RESET_CODES_FILE = "json/reset_codes.json"
+sender_email = st.secrets["gmail"]["sender_email"]
+sender_password = st.secrets["gmail"]["sender_password"]
 
 def load_users():
     try:
@@ -60,9 +62,7 @@ def send_reset_email(email, username):
     codes[username] = reset_code
     save_reset_codes(codes)
 
-    # Configuration de l'email
-    sender_email = id_mail.sender_email
-    sender_password = id_mail.sender_password
+
     receiver_email = email
     subject = "Code de réinitialisation de mot de passe"
     body = f"Bonjour {username},\n\nVotre code de réinitialisation est : {reset_code}\n\nCordialement."
