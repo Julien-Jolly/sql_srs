@@ -101,16 +101,10 @@ def initialize_environment():
         logging.error("Creating folder: data")
         os.mkdir("data")
 
-    if "json" not in os.listdir():
-        logging.error(os.listdir())
-        logging.error("Creating folder: json")
-        os.mkdir("json")
 
     if "exercises_sql_tables.duckdb" not in os.listdir("data"):
         exec(open("init_db.py").read())
 
-    if "users.json" not in os.listdir("json"):
-        exec(open("json_init").read())
 
     return duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
@@ -285,6 +279,15 @@ def display_sidebar():
 
 # Application principale
 def main_app():
+
+    if "json" not in os.listdir():
+        logging.error(os.listdir())
+        logging.error("Creating folder: json")
+        os.mkdir("json")
+
+    if "users.json" not in os.listdir("json"):
+        exec(open("json_init").read())
+
     """Fonction principale de l'application."""
     # Initialisation de l'état d'authentification
     if "authenticated" not in st.session_state:
