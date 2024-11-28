@@ -159,7 +159,18 @@ def get_exercise(con):
 def check_users_solution(con, user_query, solution_df):
     try:
         result = con.execute(user_query).df()
-        st.write("The queried dataframe is:", result)
+        text = ("Votre réponse :", "Solution :")
+
+        cols = st.columns(2)
+
+        with cols[0]:
+            st.write(f"**{text[0]}**")
+            st.dataframe(result, hide_index=True)
+
+        with cols[1]:
+            st.write(f"**{text[1]}**")
+            st.dataframe(solution_df, hide_index=True)
+
         if result.shape[0] != solution_df.shape[0]:
             st.write("The number of rows is incorrect")
 
@@ -170,7 +181,7 @@ def check_users_solution(con, user_query, solution_df):
             st.write("The content is incorrect")
 
         else:
-            st.write("The query is correct !")
+            st.write("Bravo, réponse correcte !")
             st.balloons()
 
     except (AttributeError, duckdb.ParserException) as e:
