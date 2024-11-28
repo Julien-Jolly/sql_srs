@@ -101,6 +101,11 @@ def initialize_environment():
         logging.error("Creating folder: data")
         os.mkdir("data")
 
+    if "json" not in os.listdir():
+        logging.error(os.listdir())
+        logging.error("Creating folder: json")
+        os.mkdir("json")
+
     if "exercises_sql_tables.duckdb" not in os.listdir("data"):
         exec(open("init_db.py").read())
 
