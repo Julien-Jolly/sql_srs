@@ -109,6 +109,9 @@ def initialize_environment():
     if "exercises_sql_tables.duckdb" not in os.listdir("data"):
         exec(open("init_db.py").read())
 
+    if "users.json" not in os.listdir("json"):
+        exec(open("json_init").read())
+
     return duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
 
