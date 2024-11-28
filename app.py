@@ -12,9 +12,16 @@ from datetime import date, timedelta
 import logging
 import os
 import pandas as pd
-from auth import create_account, verify_password, send_reset_email, load_users, verify_reset_code, hash_password, save_users
+from auth import (
+    create_account,
+    verify_password,
+    send_reset_email,
+    load_users,
+    verify_reset_code,
+    hash_password,
+    save_users,
+)
 
-logging.basicConfig(level=logging.INFO)
 
 def login_page():
     st.title("Page de connexion")
@@ -25,11 +32,12 @@ def login_page():
     if st.button("Se connecter"):
         if verify_password(username, password):
             st.success("Bienvenue, vous êtes connecté !")
-            st.session_state['username'] = username
-            st.session_state['authenticated'] = True
+            st.session_state["username"] = username
+            st.session_state["authenticated"] = True
             st.rerun()
         else:
             st.error("Nom d'utilisateur ou mot de passe incorrect.")
+
 
 def create_account_page():
     st.title("Créer un compte")
@@ -40,9 +48,12 @@ def create_account_page():
 
     if st.button("Créer le compte"):
         if create_account(username, password, email):
-            st.success("Compte créé avec succès ! Vous pouvez maintenant vous connecter.")
+            st.success(
+                "Compte créé avec succès ! Vous pouvez maintenant vous connecter."
+            )
         else:
             st.error("Un compte avec ce nom d'utilisateur existe déjà.")
+
 
 def forgot_password_page():
     st.title("Mot de passe oublié")
@@ -56,7 +67,7 @@ def forgot_password_page():
 
         for username, user_data in users.items():
             if user_data["email"] == email:
-                send_reset_email(email, username)  # Envoi du code de réinitialisation
+                send_reset_email(email, username)
                 user_found = True
                 st.success(f"Un code de réinitialisation a été envoyé à {email}.")
                 break
@@ -64,14 +75,15 @@ def forgot_password_page():
         if not user_found:
             st.error("Aucun utilisateur trouvé avec cet email.")
 
-    # Vérification du code et réinitialisation du mot de passe
     if reset_code:
         new_password = st.text_input("Nouveau mot de passe", type="password")
         confirm_password = st.text_input("Confirmer le mot de passe", type="password")
 
         if st.button("Réinitialiser le mot de passe"):
             if new_password == confirm_password:
-                if verify_reset_code(reset_code, email):  # Vérifie le code de réinitialisation
+                if verify_reset_code(
+                    reset_code, email
+                ):
                     if reset_user_password(email, new_password):
                         st.success("Mot de passe réinitialisé avec succès.")
                     else:
@@ -80,6 +92,7 @@ def forgot_password_page():
                     st.error("Code de réinitialisation invalide.")
             else:
                 st.error("Les mots de passe ne correspondent pas.")
+
 
 def reset_user_password(email, new_password):
     """Réinitialise le mot de passe de l'utilisateur."""
@@ -93,7 +106,6 @@ def reset_user_password(email, new_password):
     return False
 
 
-
 def initialize_environment():
     """Crée le dossier et initialise la base de données si nécessaire."""
     if "data" not in os.listdir():
@@ -101,52 +113,13 @@ def initialize_environment():
         logging.error("Creating folder: data")
         os.mkdir("data")
 
-
     if "exercises_sql_tables.duckdb" not in os.listdir("data"):
         exec(open("init_db.py").read())
-
 
     return duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
 
-def reset_password_page(token, username):
-    """
-    Page de réinitialisation de mot de passe.
-    Vérifie le token, puis permet à l'utilisateur de saisir un nouveau mot de passe.
-    """
-    st.title("Réinitialisation de mot de passe")
-
-    # Chargement des données utilisateur
-    users_data = load_users()
-
-    # Vérification de la validité du token
-    if username not in users_data or users_data[username].get("reset_token") != token:
-        st.error("Lien invalide ou expiré.")
-        return
-
-    # Formulaire pour saisir un nouveau mot de passe
-    new_password = st.text_input("Nouveau mot de passe", type="password")
-    confirm_password = st.text_input("Confirmez le nouveau mot de passe", type="password")
-
-    if st.button("Réinitialiser le mot de passe"):
-        if not new_password or not confirm_password:
-            st.error("Veuillez remplir tous les champs.")
-        elif new_password != confirm_password:
-            st.error("Les mots de passe ne correspondent pas.")
-        else:
-            # Mise à jour du mot de passe et suppression du token
-            users_data[username]["password"] = hash_password(new_password)
-            users_data[username]["reset_token"] = None  # Supprimer le token après utilisation
-            save_users(users_data)
-
-            st.success("Votre mot de passe a été réinitialisé avec succès.")
-            st.info("Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.")
-
-
-
-# Chargement d'un exercice
-def get_exercise(con):
-    """Charge un exercice basé sur le thème sélectionné."""
+def get_theme(con):
     themes = con.execute("SELECT DISTINCT theme FROM memory_state").df()
     theme = st.sidebar.selectbox(
         "Quel thème souhaitez-vous réviser ?",
@@ -154,20 +127,26 @@ def get_exercise(con):
         index=None,
         placeholder="Sélectionnez un thème...",
     )
+    return theme
 
-    # Construire la requête pour charger les exercices
-    query = f"SELECT * FROM memory_state WHERE theme = '{theme}'" if theme else "SELECT * FROM memory_state"
+
+
+def get_exercise(con):
+    theme = get_theme(con)
+
+    query = (
+        f"SELECT * FROM memory_state WHERE theme = '{theme}'"
+        if theme
+        else "SELECT * FROM memory_state"
+    )
     exercises = con.execute(query).df().sort_values("last_reviewed")
 
-    # Convertir `last_reviewed` en datetime
     exercises["last_reviewed"] = pd.to_datetime(exercises["last_reviewed"])
 
-    # Vérifier si toutes les dates de révision sont au-delà d'aujourd'hui
-    today = pd.Timestamp(date.today())  # Convertir `date.today()` en format compatible
+    today = pd.Timestamp(date.today())
     if (exercises["last_reviewed"] > today).all():
         return None, None, None, None, None
 
-    # Charger la réponse associée à l'exercice
     exercise_name = exercises.iloc[0]["exercise_name"]
     with open(f"answers/{exercise_name}.sql", "r") as file:
         answer = file.read()
@@ -177,34 +156,28 @@ def get_exercise(con):
 
 
 
-def reset_input(key):
-    if key in st.session_state:
-        st.session_state[key] = ""
-
-# Vérification de la solution utilisateur
 def check_users_solution(con, user_query, solution_df):
-    """
-    Vérifie que la requête de l'utilisateur correspond à la solution attendue.
-    """
     try:
         result = con.execute(user_query).df()
-        st.dataframe(result)
+        st.write("The queried dataframe is:", result)
+        if result.shape[0] != solution_df.shape[0]:
+            st.write("The number of rows is incorrect")
 
-        # Vérification des colonnes et comparaison des résultats
-        result = result[solution_df.columns]
-        differences = result.compare(solution_df)
+        elif result.shape[1] != solution_df.shape[1]:
+            st.write("The number of columns is incorrect")
 
-        if differences.shape == (0, 0):
-            st.success("Correct !")
-            st.balloons()
-            reset_input(user_query)  # Réinitialise après validation
+        elif not result.compare(solution_df).empty:
+            st.write("The content is incorrect")
+
         else:
-            st.error("Des différences existent avec la solution.")
-            st.dataframe(differences)
-    except KeyError:
-        st.error("Certaines colonnes sont manquantes ou incorrectes.")
+            st.write("The query is correct !")
+            st.balloons()
 
-# Gestion des révisions
+    except (AttributeError, duckdb.ParserException) as e:
+        st.write("Oops! There is a syntax error in your query. Please try again.")
+        result = None
+
+
 def schedule_review(con, exercise_name):
     """Planifie une prochaine révision."""
     col1, col2, col3, col4 = st.columns(4)
@@ -235,50 +208,48 @@ def schedule_review(con, exercise_name):
             con.execute("UPDATE memory_state SET last_reviewed = '1970-01-01'")
             st.rerun()
 
-# Affichage des tables
+
 def display_tables(con, exercise):
-    """Affiche les tables liées à l'exercice, avec deux tables par ligne et sans indice."""
     st.subheader("Tables")
     tables = exercise["tables"]
 
-    # Répartir les tables en lignes de deux colonnes
     for i in range(0, len(tables), 2):
-        cols = st.columns(2)  # Crée deux colonnes
-        for j, table in enumerate(tables[i:i+2]):  # Parcourt jusqu'à deux tables
-            with cols[j]:  # Place chaque table dans une colonne
+        cols = st.columns(2)
+        for j, table in enumerate(tables[i : i + 2]):
+            with cols[j]:
                 st.write(f"**Table : {table}**")
                 table_df = con.execute(f"SELECT * FROM {table}").df()
-                st.dataframe(table_df)
+                st.dataframe(table_df, hide_index=True)
 
-# Affichage de la solution
+
 def display_solution(solution_query):
-    """Affiche la solution SQL."""
     st.subheader("Solution")
-    st.text(solution_query)
+    with st.expander("voir"):
+        st.text(solution_query)
 
-# Ajout de la sidebar
+
 def display_sidebar():
-    """Affiche une sidebar avec navigation ancrée."""
-    anchor_ids = ["exercises_list", "tables", "solution"]
-    anchor_icons = ["list", "table", "code"]
+    anchor_ids = ["exercises_list", "reponse","tables", "solution"]
+    anchor_icons = ["list", "code", "table", "check-circle"]
 
     with st.sidebar:
         st.subheader("Navigation")
         scroll_navbar(
             anchor_ids,
-            anchor_labels=["Liste des exercices", "Tables", "Solution"],
-            anchor_icons=anchor_icons
+            anchor_labels=["Liste des exercices", "Votre réponse", "Tables", "Solution"],
+            anchor_icons=anchor_icons,
         )
     with st.sidebar:
         if st.session_state["authenticated"]:
-            # Si l'utilisateur est authentifié, afficher un bouton de déconnexion
             if st.button("Quitter"):
                 st.session_state["authenticated"] = False
                 st.session_state["username"] = None
-                st.rerun()  # Forcer un rechargement pour afficher la page de connexion
+                st.rerun()
 
-# Application principale
+
+
 def main_app():
+
 
     if "json" not in os.listdir():
         logging.error(os.listdir())
@@ -288,63 +259,61 @@ def main_app():
     if "users.json" not in os.listdir("json"):
         exec(open("json_init.py").read())
 
-    """Fonction principale de l'application."""
-    # Initialisation de l'état d'authentification
+    st.title("Système de révision SQL")
+
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
         st.session_state["username"] = None
 
-    # Récupération des paramètres d'URL (utile pour les fonctionnalités comme les tokens)
-    query_params = st.query_params
 
-    # Gestion des tokens pour la réinitialisation de mot de passe
-    if "token" in query_params and "username" in query_params:
-        token = query_params["token"]
-        username = query_params["username"]
-        reset_password_page(token=token, username=username)
-        return  # On quitte la fonction après avoir affiché la page de réinitialisation
-
-    # Si l'utilisateur est connecté, afficher l'application principale
     if st.session_state["authenticated"]:
-        st.title("Système de révision SQL")
 
-        # Chargement de l'environnement
+
         con = initialize_environment()
         exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
 
-        # Si aucun exercice n'est disponible
         if exercise is None:
             st.info("Aucune révision prévue aujourd'hui.")
             schedule_review(con, "all")  # Permet de réinitialiser les dates de révision
         else:
-            display_sidebar()  # Barre latérale pour la navigation
+            display_sidebar()
 
-            # Contenu principal : Affichage des exercices
+            st.divider()
+
+            with st.container():
+                st.markdown('<div id="exercises_list"></div>',unsafe_allow_html=True)
+                st.subheader("Liste des exercices")
+                exercises_display = exercises.drop(columns=["tables"], errors="ignore")
+                exercises_display["last_reviewed"] = exercises_display["last_reviewed"].dt.strftime("%Y-%m-%d")
+                st.dataframe(exercises_display, hide_index=True)
+
+            st.divider()
+
             with st.container():
                 st.subheader(exercise["question"])
-                user_query = st.text_area("Entrez votre requête SQL", key="user_input")
+                st.markdown('<div id="reponse"></div>', unsafe_allow_html=True)
+                user_query = st.text_area("titre", key="user_input",label_visibility="hidden")
                 schedule_review(con, exercise_name)
 
                 if st.button("Valider la solution"):
                     check_users_solution(con, user_query, solution_df)
 
-            # Navigation entre les sections : Exercices, Tables, Solutions
-            with st.container():
-                st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
-                st.subheader("Liste des exercices")
-                st.dataframe(exercises)
+            st.divider()
 
-                st.markdown('<div id="tables"></div>', unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div id="tables"></div>,<style>:target::before {content: "";display: block;height: 80px;margin-top: -80px;}</style>', unsafe_allow_html=True)
                 display_tables(con, exercise)
+
+                st.divider()
 
                 st.markdown('<div id="solution"></div>', unsafe_allow_html=True)
                 display_solution(answer)
+
     else:
-        # Si l'utilisateur n'est pas connecté, afficher les options de connexion
         st.sidebar.title("Navigation")
         page = st.sidebar.radio(
             "Accès à l'application",
-            ["Connexion", "Créer un compte", "Mot de passe oublié"]
+            ["Connexion", "Créer un compte", "Mot de passe oublié"],
         )
         if page == "Connexion":
             login_page()
@@ -354,6 +323,5 @@ def main_app():
             forgot_password_page()
 
 
-# Exécution de l'application
 if __name__ == "__main__":
     main_app()
