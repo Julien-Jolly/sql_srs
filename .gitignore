@@ -5,4 +5,5 @@ __pycache__/
 data/
 test.py
 .streamlit/secrets.toml
-*.json
+json/reset_codes.json
+json/users.json

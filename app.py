@@ -286,7 +286,7 @@ def main_app():
         os.mkdir("json")
 
     if "users.json" not in os.listdir("json"):
-        exec(open("json_init").read())
+        exec(open("json_init.py").read())
 
     """Fonction principale de l'application."""
     # Initialisation de l'état d'authentification
