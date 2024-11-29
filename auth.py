@@ -13,7 +13,7 @@ from googleapiclient.http import MediaFileUpload
 
 
 GOOGLE_DRIVE_FILE_ID = st.secrets["google_drive"]["users_file_id"]
-SERVICE_ACCOUNT_FILE = "json/windy-forge-443215-n8-070c4a93947c.json"
+SERVICE_ACCOUNT_INFO = st.secrets["google_credentials"]
 API_NAME = 'drive'
 API_VERSION = 'v3'
 
@@ -31,8 +31,8 @@ def download_json():
 
 def authenticate_google_drive():
     try:
-        credentials = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE, scopes=["https://www.googleapis.com/auth/drive"]
+        credentials = service_account.Credentials.from_service_account_info(
+            SERVICE_ACCOUNT_INFO, scopes=["https://www.googleapis.com/auth/drive"]
         )
         service = build(API_NAME, API_VERSION, credentials=credentials)
         return service
