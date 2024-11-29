@@ -45,11 +45,10 @@ def authenticate_google_drive():
 def load_users():
     service = authenticate_google_drive()
     try:
-        file = service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
         file_content = service.files().get_media(fileId=GOOGLE_DRIVE_FILE_ID).execute()
 
         with open("json/users.json", "wb") as f:
-            f.write(file_content)
+            f.write(file_content)  # Sauvegarde du fichier téléchargé
 
         with open("json/users.json", "r") as f:
             return json.load(f)
@@ -61,7 +60,6 @@ def load_users():
 
 
 def save_users(users):
-    """Sauvegarde le fichier des utilisateurs sur Google Drive."""
     try:
         with open("json/users.json", "w") as f:
             json.dump(users, f, indent=4)
@@ -70,6 +68,7 @@ def save_users(users):
         file_metadata = {"name": "users.json"}
         media = MediaFileUpload("json/users.json", mimetype="application/json")
 
+        # Vérifie si le fichier existe déjà et met à jour le fichier Google Drive
         file = service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
         updated_file = service.files().update(fileId=GOOGLE_DRIVE_FILE_ID, media_body=media).execute()
 
