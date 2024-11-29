@@ -21,7 +21,6 @@ if not os.path.exists(TABLES_FILE):
 # FONCTION DE CONVERSION
 # -----------------------------------------------------------------------------------
 def convert_value(value, dtype):
-    """Convertit la valeur selon le type donné (int, float, str)."""
     if dtype == "int":
         return int(value)
     elif dtype == "float":

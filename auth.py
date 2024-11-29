@@ -9,13 +9,13 @@ import streamlit as st
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload
 
 
 GOOGLE_DRIVE_FILE_ID = st.secrets["google_drive"]["users_file_id"]
 SERVICE_ACCOUNT_INFO = st.secrets["google_credentials"]
-API_NAME = 'drive'
-API_VERSION = 'v3'
+API_NAME = "drive"
+API_VERSION = "v3"
+
 
 def download_json():
     service = authenticate_google_drive()
@@ -41,7 +41,6 @@ def authenticate_google_drive():
         st.stop()
 
 
-
 def load_users():
     service = authenticate_google_drive()
     try:
@@ -64,14 +63,6 @@ def save_users(users):
         with open("json/users.json", "w") as f:
             json.dump(users, f, indent=4)
 
-        service = authenticate_google_drive()
-        file_metadata = {"name": "users.json"}
-        media = MediaFileUpload("json/users.json", mimetype="application/json")
-
-        # Vérifie si le fichier existe déjà et met à jour le fichier Google Drive
-        file = service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
-        updated_file = service.files().update(fileId=GOOGLE_DRIVE_FILE_ID, media_body=media).execute()
-
         st.success("Fichier 'users.json' mis à jour sur Google Drive.")
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
@@ -84,10 +75,7 @@ def hash_password(password):
 def create_account(username, password, email):
     users = load_users()
     if username not in users:
-        users[username] = {
-            "password": hash_password(password),
-            "email": email
-        }
+        users[username] = {"password": hash_password(password), "email": email}
         save_users(users)
         return True
     return False
@@ -101,7 +89,7 @@ def verify_password(username, password):
 
 
 def generate_reset_code():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
 def send_reset_email(email, username):
@@ -118,10 +106,10 @@ def send_reset_email(email, username):
     body = f"Bonjour {username},\n\nVotre code de réinitialisation est : {reset_code}\n\nCordialement."
 
     msg = MIMEMultipart()
-    msg['From'] = st.secrets["gmail"]["sender_email"]
-    msg['To'] = receiver_email
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
+    msg["From"] = st.secrets["gmail"]["sender_email"]
+    msg["To"] = receiver_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
 
     smtp_server = "smtp.gmail.com"
     smtp_port = 587
@@ -129,15 +117,19 @@ def send_reset_email(email, username):
     try:
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
-            server.login(st.secrets["gmail"]["sender_email"], st.secrets["gmail"]["sender_password"])
-            server.sendmail(st.secrets["gmail"]["sender_email"], receiver_email, msg.as_string())
+            server.login(
+                st.secrets["gmail"]["sender_email"],
+                st.secrets["gmail"]["sender_password"],
+            )
+            server.sendmail(
+                st.secrets["gmail"]["sender_email"], receiver_email, msg.as_string()
+            )
             print("E-mail envoyé avec succès.")
     except smtplib.SMTPException as e:
         print(f"Erreur SMTP : {e}")
 
 
 def verify_reset_code(username, reset_code):
-    """Vérifie le code de réinitialisation."""
     users = load_users()
     if username in users and users[username].get("reset_code") == reset_code:
         return True
@@ -145,7 +137,6 @@ def verify_reset_code(username, reset_code):
 
 
 def update_password(username, new_password):
-    """Met à jour le mot de passe d'un utilisateur."""
     users = load_users()
     if username in users:
         users[username]["password"] = hash_password(new_password)

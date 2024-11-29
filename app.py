@@ -94,7 +94,6 @@ def forgot_password_page():
 
 
 def reset_user_password(email, new_password):
-    """Réinitialise le mot de passe de l'utilisateur."""
     users = load_users()
     for username, user_data in users.items():
         if user_data["email"] == email:
@@ -106,7 +105,6 @@ def reset_user_password(email, new_password):
 
 
 def initialize_environment():
-    """Crée le dossier et initialise la base de données si nécessaire."""
     if "data" not in os.listdir():
         logging.error(os.listdir())
         logging.error("Creating folder: data")
@@ -168,7 +166,6 @@ def get_exercise(con):
 
 
 def check_users_solution(con, user_query, solution_df):
-    """Vérification de la solution de l'utilisateur."""
     try:
         result = con.execute(user_query).df()
         text = ("Votre réponse :", "Solution :")
@@ -199,11 +196,9 @@ def check_users_solution(con, user_query, solution_df):
         st.write(
             "Il y a une erreur dans la syntaxe de votre requête. Veuillez réessayer."
         )
-        result = None
 
 
 def schedule_review(con, exercise_name):
-    """Planifie une prochaine révision."""
     col1, col2, col3, col4 = st.columns(4)
     if exercise_name != "all":
         with col1:
