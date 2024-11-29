@@ -1,8 +1,21 @@
 import duckdb
 import pandas as pd
+import os
+import gdown
 
 con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
+EXERCISES_FILE_ID = "1NM1Q5iF7UsEtR1I2V3r6MgXqQpgG9T9f"
+TABLES_FILE_ID = "1PsMtuAVsX0b-0TtNaDC1MvirkPKrQNr0"
+
+EXERCISES_FILE = "data/exercises.csv"
+TABLES_FILE = "data/tables.csv"
+
+if not os.path.exists(EXERCISES_FILE):
+    gdown.download(f"https://drive.google.com/uc?id={EXERCISES_FILE_ID}", EXERCISES_FILE, quiet=False)
+
+if not os.path.exists(TABLES_FILE):
+    gdown.download(f"https://drive.google.com/uc?id={TABLES_FILE_ID}", TABLES_FILE, quiet=False)
 
 # -----------------------------------------------------------------------------------
 # FONCTION DE CONVERSION

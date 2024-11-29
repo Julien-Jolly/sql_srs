@@ -1,9 +1,7 @@
 .idea/
 venv*/
-*.csv
 __pycache__/
 data/
 test.py
 .streamlit/secrets.toml
-json/reset_codes.json
-json/users.json
+json/

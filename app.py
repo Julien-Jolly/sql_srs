@@ -20,6 +20,7 @@ from auth import (
     verify_reset_code,
     hash_password,
     save_users,
+    download_json
 )
 
 
@@ -339,6 +340,7 @@ def main_app():
 
 
 if __name__ == "__main__":
+    download_json()
     if "json" not in os.listdir():
         logging.error(os.listdir())
         logging.error("Creating folder: json")
