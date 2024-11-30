@@ -7,8 +7,10 @@
 # pylint: disable = missing-module-docstring
 import duckdb
 import streamlit as st
+from altair import themes
+from docutils.nodes import author
 from streamlit_scroll_navigation import scroll_navbar
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import logging
 import os
 import pandas as pd
@@ -152,51 +154,48 @@ def initialize_environment():
 
 def get_theme(con):
     themes = con.execute("SELECT DISTINCT theme FROM memory_state").fetchdf()
+    theme_list = themes["theme"].unique().tolist()
+
+    default_theme = theme_list[0] if theme_list else None
+
+    default_index = theme_list.index(default_theme) if default_theme else 0
+
     theme = st.sidebar.selectbox(
         "Quel thème souhaitez-vous réviser ?",
-        themes["theme"].unique(),
-        index=None,
-        placeholder="Sélectionnez un thème...",
+        theme_list,
+        index=default_index,
+        placeholder="Sélectionnez un thème..." if theme_list else None,
     )
     return theme
 
+def get_author(con):
+    authors = con.execute("SELECT DISTINCT author FROM memory_state").fetchdf()
+    author_list = authors["author"].unique().tolist()
 
-def get_exercise(con):
-    theme = get_theme(con)
+    default_theme = author_list[0] if author_list else None
 
-    query = (
-        f"SELECT * FROM memory_state WHERE theme = '{theme}'"
-        if theme
-        else "SELECT * FROM memory_state"
+    default_index = author_list.index(default_theme) if default_theme else 0
+
+
+    author = st.sidebar.selectbox(
+        "Auteur de l'exercice :",
+        authors["author"].unique(),
+        index=default_index,
+        placeholder="Sélectionnez un thème...",
     )
-    exercises = con.execute(query).df().sort_values("last_reviewed")
+    return author
 
-    exercises["last_reviewed"] = pd.to_datetime(exercises["last_reviewed"])
-
-    today = pd.Timestamp(date.today())
-    if (exercises["last_reviewed"] > today).all():
-        return None, None, None, None, None
-
-    exercise_name = exercises.iloc[0]["exercise_name"]
-
-    query_answer = (
-        f"SELECT answers FROM exercises WHERE exercise_name = '{exercise_name}'"
+def get_difficulty(con):
+    difficulties = con.execute("SELECT DISTINCT difficulty FROM memory_state").fetchdf()
+    options = difficulties["difficulty"].astype(str).tolist()
+    fixed_order = ['easy', 'medium', 'hard']
+    options = [opt for opt in fixed_order if opt in options]
+    difficulty = st.sidebar.select_slider(
+        'Choisissez un niveau de difficulté :',
+        options=options,
+        value=options[0] if options else 'medium'
     )
-    answer_df = con.execute(query_answer).fetchdf()
-
-    if not answer_df.empty:
-        answer = answer_df.iloc[0]["answers"]
-        answer = answer.strip('"')
-    else:
-        answer = "No answer found for this exercise"
-
-    try:
-        solution_df = con.execute(answer).df()
-    except Exception as e:
-        solution_df = None
-        st.error(f"Erreur dans l'exécution de la requête SQL : {e}")
-
-    return exercises, exercises.iloc[0], exercise_name, answer, solution_df
+    return difficulty
 
 
 def check_users_solution(con, user_query, solution_df):
@@ -294,22 +293,30 @@ def display_solution(solution_query):
         st.text(solution_query)
 
 
-def display_sidebar():
+def display_menu(con):
     anchor_ids = ["exercises_list", "response", "tables", "solution"]
     anchor_icons = ["list", "code", "table", "check-circle"]
 
     with st.sidebar:
-        st.subheader("Navigation")
+        st.subheader("Menu")
         scroll_navbar(
             anchor_ids,
             anchor_labels=[
-                "Liste des exercices",
+                "Liste des exercises",
                 "Votre réponse",
                 "Tables",
                 "Solution",
             ],
             anchor_icons=anchor_icons,
         )
+
+
+    theme = get_theme(con)
+
+    author = get_author(con)
+
+    difficulty = get_difficulty(con)
+
     with st.sidebar:
         if st.session_state["authenticated"]:
             if st.button("Quitter"):
@@ -317,15 +324,27 @@ def display_sidebar():
                 st.session_state["username"] = None
                 st.rerun()
 
+    return theme, author, difficulty
 
-def launch_questions(exercises, exercise, con, exercise_name, solution_df, answer):
+
+def launch_questions(exercises, exercise, con, exercise_name, solution_df, answer, theme, author, difficulty):
     st.subheader(f"Bienvenue {st.session_state["username"]}")
     st.divider()
+
+    filtered_exercises = exercises[
+        (exercises['difficulty'] == difficulty) &
+        (exercises['theme'] == theme) &
+        (exercises['author'] == author)
+        ]
+
+    if exercise is None:
+        st.info("La selection ne contient aucun exercice")
 
     with st.container():
         st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
         st.subheader("Liste des exercices")
-        exercises_display = exercises.drop(columns=["tables"], errors="ignore")
+        selected_columns = ["exercise_name", "theme", "difficulty", "last_reviewed","author"]
+        exercises_display = filtered_exercises[selected_columns]
         exercises_display["last_reviewed"] = exercises_display[
             "last_reviewed"
         ].dt.strftime("%Y-%m-%d")
@@ -341,6 +360,8 @@ def launch_questions(exercises, exercise, con, exercise_name, solution_df, answe
 
         if st.button("Valider la solution"):
             check_users_solution(con, user_query, solution_df)
+
+        st.write("")
 
     st.divider()
 
@@ -360,13 +381,50 @@ def launch_questions(exercises, exercise, con, exercise_name, solution_df, answe
 def main_app():
 
     con = initialize_environment()
-    exercises, exercise, exercise_name, answer, solution_df = get_exercise(con)
-    display_sidebar()
-    if exercise is None:
-        st.info("Aucune révision prévue aujourd'hui.")
+
+    theme, author, difficulty = display_menu(con)
+
+    query = (
+        f"SELECT * FROM memory_state WHERE theme = '{theme}' AND difficulty = '{difficulty}'AND author = '{author}'"
+        if theme
+        else "SELECT * FROM memory_state"
+    )
+    exercises = con.execute(query).df().sort_values("last_reviewed")
+    print(exercises["last_reviewed"])
+    exercises["last_reviewed"] = pd.to_datetime(exercises["last_reviewed"])
+
+
+    today = pd.Timestamp(date.today())
+    if (exercises["last_reviewed"] > today).all():
+        st.write("Aucune révision prévue aujourd'hui.")
         schedule_review(con, "all")  # Permet de réinitialiser les dates de révision
+        return
+
+    exercise_name = exercises.iloc[0]["exercise_name"]
+
+    query_answer = (
+        f"SELECT answers FROM exercises WHERE exercise_name = '{exercise_name}'"
+    )
+    answer_df = con.execute(query_answer).fetchdf()
+
+    if not answer_df.empty:
+        answer = answer_df.iloc[0]["answers"]
+        answer = answer.strip('"')
     else:
-        launch_questions(exercises, exercise, con, exercise_name, solution_df, answer)
+        answer = "No answer found for this exercise"
+
+    try:
+        solution_df = con.execute(answer).df()
+
+    except Exception as e:
+        solution_df = None
+        st.error(f"Erreur dans l'exécution de la requête SQL : {e}")
+
+
+    exercise = exercises.iloc[0]
+
+
+    launch_questions(exercises, exercise, con, exercise_name, solution_df, answer, theme, author, difficulty)
 
 
 if __name__ == "__main__":

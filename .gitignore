@@ -5,3 +5,4 @@ data/
 test.py
 .streamlit/secrets.toml
 json/
+exercises/

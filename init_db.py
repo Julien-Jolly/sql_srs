@@ -8,6 +8,7 @@ con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=Fals
 EXERCISES_FILE_ID = "1NM1Q5iF7UsEtR1I2V3r6MgXqQpgG9T9f"
 TABLES_FILE_ID = "1PsMtuAVsX0b-0TtNaDC1MvirkPKrQNr0"
 
+
 EXERCISES_FILE = "data/exercises.csv"
 TABLES_FILE = "data/tables.csv"
 
@@ -41,7 +42,7 @@ exercises_df = pd.read_csv(exercises_csv, delimiter=";", encoding="latin-1")
 con.execute(
     """
     CREATE OR REPLACE TABLE memory_state AS 
-    SELECT exercise_name, theme, tables_used, last_reviewed, question, difficulty, tables, answers
+    SELECT exercise_name, theme, tables_used, last_reviewed, question, difficulty, tables, answers, author
     FROM exercises_df
 """
 )
@@ -84,3 +85,17 @@ for index, row in tables_df.iterrows():
 
 
 con.close()
+
+
+# directory = "/home/julien/sql_srs/exercises"
+# results = {}
+# python_files = [f for f in os.listdir(directory) if f.endswith(".py")]
+#
+# for filename in os.listdir(directory):
+#     if filename.endswith(".py"):
+#         module_name = filename[:-3]
+#         module_path = f"exercises.{module_name}"
+#
+#         module = importlib.import_module(module_path)
+#
+#         module.make_df(con)
