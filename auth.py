@@ -9,6 +9,7 @@ import streamlit as st
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
 
 
 GOOGLE_DRIVE_FILE_ID = st.secrets["google_drive"]["users_file_id"]
@@ -47,10 +48,12 @@ def load_users():
         file_content = service.files().get_media(fileId=GOOGLE_DRIVE_FILE_ID).execute()
 
         with open("json/users.json", "wb") as f:
-            f.write(file_content)  # Sauvegarde du fichier téléchargé
+          f.write(file_content)
 
         with open("json/users.json", "r") as f:
+            print("ok")
             return json.load(f)
+
     except FileNotFoundError:
         return {}
     except Exception as e:
@@ -63,9 +66,17 @@ def save_users(users):
         with open("json/users.json", "w") as f:
             json.dump(users, f, indent=4)
 
+        service = authenticate_google_drive()
+        media = MediaFileUpload("json/users.json", mimetype="application/json")
+
+        service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
+        service.files().update(fileId=GOOGLE_DRIVE_FILE_ID, media_body=media).execute()
+
         st.success("Fichier 'users.json' mis à jour sur Google Drive.")
+
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
+        print(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
 
 
 def hash_password(password):
@@ -95,6 +106,7 @@ def generate_reset_code():
 def send_reset_email(email, username):
     reset_code = generate_reset_code()
     users = load_users()
+    print(reset_code)
     if username in users:
         users[username]["reset_code"] = reset_code
         save_users(users)
@@ -106,23 +118,23 @@ def send_reset_email(email, username):
     body = f"Bonjour {username},\n\nVotre code de réinitialisation est : {reset_code}\n\nCordialement."
 
     msg = MIMEMultipart()
-    msg["From"] = st.secrets["gmail"]["sender_email"]
+    msg['From'] = st.secrets["hotmail"]["sender_email"]
     msg["To"] = receiver_email
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
 
-    smtp_server = "smtp.gmail.com"
+    smtp_server = "smtp-mail.outlook.com"
     smtp_port = 587
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
             server.login(
-                st.secrets["gmail"]["sender_email"],
-                st.secrets["gmail"]["sender_password"],
+                st.secrets["hotmail"]["sender_email"],
+                st.secrets["hotmail"]["sender_password"],
             )
             server.sendmail(
-                st.secrets["gmail"]["sender_email"], receiver_email, msg.as_string()
+                st.secrets["hotmail"]["sender_email"], receiver_email, msg.as_string()
             )
             print("E-mail envoyé avec succès.")
     except smtplib.SMTPException as e:

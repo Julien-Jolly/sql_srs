@@ -59,9 +59,56 @@ def create_account_page():
 def forgot_password_page():
     st.title("Mot de passe oublié")
 
-    email = st.text_input("Entrez votre email")
-    reset_code = st.text_input("Entrez le code de réinitialisation envoyé par email")
+    if "reset_email" not in st.session_state:
+        st.session_state.reset_email = None
+        st.session_state.reset_step = "email"
 
+    if st.session_state.reset_step == "email":
+        send_reinit_mail()
+
+    elif st.session_state.reset_step == "code":
+        reinit_code_validation()
+
+    elif st.session_state.reset_step == "new_password":
+        reinit_password()
+
+
+def reinit_code_validation():
+    reset_code = st.text_input("Entrez le code de réinitialisation envoyé par email")
+    if st.button("Valider le code"):
+        users = load_users()
+        username = None
+        for user, data in users.items():
+            if data["email"] == st.session_state.reset_email:
+                username = user
+                break
+
+        if username and verify_reset_code(username, reset_code):
+            st.session_state.reset_step = "new_password"
+            st.success("Code validé avec succès. Veuillez entrer un nouveau mot de passe.")
+            st.rerun()
+        else:
+            st.error("Code de réinitialisation invalide.")
+
+
+def reinit_password():
+    new_password = st.text_input("Nouveau mot de passe", type="password")
+    confirm_password = st.text_input("Confirmer le mot de passe", type="password")
+    if st.button("Réinitialiser le mot de passe"):
+        if new_password == confirm_password:
+            if reset_user_password(st.session_state.reset_email, new_password):
+                st.success("Mot de passe réinitialisé avec succès.")
+                st.session_state.reset_email = None
+                st.session_state.reset_step = "email"
+                st.rerun()
+            else:
+                st.error("Erreur lors de la réinitialisation du mot de passe.")
+        else:
+            st.error("Les mots de passe ne correspondent pas.")
+
+
+def send_reinit_mail():
+    email = st.text_input("Entrez votre email")
     if st.button("Envoyer un code de réinitialisation"):
         users = load_users()
         user_found = False
@@ -70,27 +117,14 @@ def forgot_password_page():
             if user_data["email"] == email:
                 send_reset_email(email, username)
                 user_found = True
+                st.session_state.reset_email = email
+                st.session_state.reset_step = "code"
                 st.success(f"Un code de réinitialisation a été envoyé à {email}.")
+                st.rerun()
                 break
 
         if not user_found:
             st.error("Aucun utilisateur trouvé avec cet email.")
-
-    if reset_code:
-        new_password = st.text_input("Nouveau mot de passe", type="password")
-        confirm_password = st.text_input("Confirmer le mot de passe", type="password")
-
-        if st.button("Réinitialiser le mot de passe"):
-            if new_password == confirm_password:
-                if verify_reset_code(reset_code, email):
-                    if reset_user_password(email, new_password):
-                        st.success("Mot de passe réinitialisé avec succès.")
-                    else:
-                        st.error("Erreur lors de la réinitialisation du mot de passe.")
-                else:
-                    st.error("Code de réinitialisation invalide.")
-            else:
-                st.error("Les mots de passe ne correspondent pas.")
 
 
 def reset_user_password(email, new_password):
@@ -285,6 +319,7 @@ def display_sidebar():
 
 
 def launch_questions(exercises, exercise, con, exercise_name, solution_df, answer):
+    st.subheader(f"Bienvenue {st.session_state["username"]}")
     st.divider()
 
     with st.container():
