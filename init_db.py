@@ -66,7 +66,7 @@ print(exercises_df)
 # -----------------------------------------------------------------------------------
 
 FOLDER_ID = "1_hbAjm0oACHL4Qo73KBhgTEQrMXOhKMK"  # ID du dossier Google Drive
-directory = "/home/julien/sql_srs/data/tables"
+directory = "data/tables"
 
 os.makedirs(directory, exist_ok=True)
 
