@@ -74,7 +74,9 @@ tables_directory = os.path.join(base_directory, "data", "tables")
 os.makedirs(tables_directory, exist_ok=True)
 
 sys.path.append(tables_directory)
-
+print(f"Base directory: {base_directory}")
+print(f"EXERCISES_FILE: {EXERCISES_FILE}")
+print(f"tables_directory: {tables_directory}")
 
 # Fonction pour télécharger un fichier Google Drive
 def download_file(file_id, file_name, local_directory):
