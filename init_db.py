@@ -69,7 +69,7 @@ print(exercises_df)
 # -----------------------------------------------------------------------------------
 
 FOLDER_ID = "1_hbAjm0oACHL4Qo73KBhgTEQrMXOhKMK"  # ID du dossier Google Drive
-tables_directory = os.path.join(base_directory, "data", "tables")
+tables_directory = os.path.join(base_directory, "data")
 
 os.makedirs(tables_directory, exist_ok=True)
 
