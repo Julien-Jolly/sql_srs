@@ -1,16 +1,13 @@
 # Base de données : Remplacer le fichier JSON par une base de données (SQLite, PostgreSQL, etc.).
 # Rôles et permissions : Ajouter des niveaux d'accès pour les utilisateurs.
-# Email de récupération : Implémenter une récupération de mot de passe via email.
 # Design : Améliorer l'interface utilisateur avec des widgets Streamlit avancés.
 
 
 # pylint: disable = missing-module-docstring
 import duckdb
 import streamlit as st
-from altair import themes
-from docutils.nodes import author
 from streamlit_scroll_navigation import scroll_navbar
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 import logging
 import os
 import pandas as pd
@@ -22,7 +19,7 @@ from auth import (
     verify_reset_code,
     hash_password,
     save_users,
-    download_json
+    download_json,
 )
 
 
@@ -87,7 +84,9 @@ def reinit_code_validation():
 
         if username and verify_reset_code(username, reset_code):
             st.session_state.reset_step = "new_password"
-            st.success("Code validé avec succès. Veuillez entrer un nouveau mot de passe.")
+            st.success(
+                "Code validé avec succès. Veuillez entrer un nouveau mot de passe."
+            )
             st.rerun()
         else:
             st.error("Code de réinitialisation invalide.")
@@ -168,6 +167,7 @@ def get_theme(con):
     )
     return theme
 
+
 def get_author(con):
     authors = con.execute("SELECT DISTINCT author FROM memory_state").fetchdf()
     author_list = authors["author"].unique().tolist()
@@ -175,7 +175,6 @@ def get_author(con):
     default_theme = author_list[0] if author_list else None
 
     default_index = author_list.index(default_theme) if default_theme else 0
-
 
     author = st.sidebar.selectbox(
         "Auteur de l'exercice :",
@@ -185,15 +184,16 @@ def get_author(con):
     )
     return author
 
+
 def get_difficulty(con):
     difficulties = con.execute("SELECT DISTINCT difficulty FROM memory_state").fetchdf()
     options = difficulties["difficulty"].astype(str).tolist()
-    fixed_order = ['easy', 'medium', 'hard']
+    fixed_order = ["easy", "medium", "hard"]
     options = [opt for opt in fixed_order if opt in options]
     difficulty = st.sidebar.select_slider(
-        'Choisissez un niveau de difficulté :',
+        "Choisissez un niveau de difficulté :",
         options=options,
-        value=options[0] if options else 'medium'
+        value=options[0] if options else "medium",
     )
     return difficulty
 
@@ -310,7 +310,6 @@ def display_menu(con):
             anchor_icons=anchor_icons,
         )
 
-
     theme = get_theme(con)
 
     author = get_author(con)
@@ -327,15 +326,25 @@ def display_menu(con):
     return theme, author, difficulty
 
 
-def launch_questions(exercises, exercise, con, exercise_name, solution_df, answer, theme, author, difficulty):
+def launch_questions(
+    exercises,
+    exercise,
+    con,
+    exercise_name,
+    solution_df,
+    answer,
+    theme,
+    author,
+    difficulty,
+):
     st.subheader(f"Bienvenue {st.session_state["username"]}")
     st.divider()
 
     filtered_exercises = exercises[
-        (exercises['difficulty'] == difficulty) &
-        (exercises['theme'] == theme) &
-        (exercises['author'] == author)
-        ]
+        (exercises["difficulty"] == difficulty)
+        & (exercises["theme"] == theme)
+        & (exercises["author"] == author)
+    ]
 
     if exercise is None:
         st.info("La selection ne contient aucun exercice")
@@ -343,7 +352,13 @@ def launch_questions(exercises, exercise, con, exercise_name, solution_df, answe
     with st.container():
         st.markdown('<div id="exercises_list"></div>', unsafe_allow_html=True)
         st.subheader("Liste des exercices")
-        selected_columns = ["exercise_name", "theme", "difficulty", "last_reviewed","author"]
+        selected_columns = [
+            "exercise_name",
+            "theme",
+            "difficulty",
+            "last_reviewed",
+            "author",
+        ]
         exercises_display = filtered_exercises[selected_columns]
         exercises_display["last_reviewed"] = exercises_display[
             "last_reviewed"
@@ -393,7 +408,6 @@ def main_app():
     print(exercises["last_reviewed"])
     exercises["last_reviewed"] = pd.to_datetime(exercises["last_reviewed"])
 
-
     today = pd.Timestamp(date.today())
     if (exercises["last_reviewed"] > today).all():
         st.write("Aucune révision prévue aujourd'hui.")
@@ -420,11 +434,19 @@ def main_app():
         solution_df = None
         st.error(f"Erreur dans l'exécution de la requête SQL : {e}")
 
-
     exercise = exercises.iloc[0]
 
-
-    launch_questions(exercises, exercise, con, exercise_name, solution_df, answer, theme, author, difficulty)
+    launch_questions(
+        exercises,
+        exercise,
+        con,
+        exercise_name,
+        solution_df,
+        answer,
+        theme,
+        author,
+        difficulty,
+    )
 
 
 if __name__ == "__main__":
