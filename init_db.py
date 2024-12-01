@@ -17,6 +17,10 @@ service = build("drive", "v3", credentials=credentials)
 # Connexion à la base de données DuckDB
 con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
+if 'STREAMLIT_CLOUD' in os.environ:
+    base_directory = "/mount/src/sql_srs"
+else:
+    base_directory = os.path.abspath(".")
 
 # -----------------------------------------------------------------------------------
 # FONCTION DE CONVERSION
@@ -37,14 +41,13 @@ def convert_value(value, dtype):
 # -----------------------------------------------------------------------------------
 
 EXERCISES_FILE_ID = "1NM1Q5iF7UsEtR1I2V3r6MgXqQpgG9T9f"
-EXERCISES_FILE = "data/exercises.csv"
+EXERCISES_FILE = os.path.join(base_directory, "data", "exercises.csv")
 
 if not os.path.exists(EXERCISES_FILE):
-    gdown.download(
-        f"https://drive.google.com/uc?id={EXERCISES_FILE_ID}",
-        EXERCISES_FILE,
-        quiet=False,
-    )
+    gdown.download(f"https://drive.google.com/uc?id={EXERCISES_FILE_ID}", EXERCISES_FILE, quiet=False)
+    print(f"Le fichier {EXERCISES_FILE} a été téléchargé.")
+else:
+    print(f"Le fichier {EXERCISES_FILE} existe déjà.")
 
 exercises_csv = "data/exercises.csv"
 exercises_df = pd.read_csv(exercises_csv, delimiter=";", encoding="latin-1")
@@ -66,20 +69,21 @@ print(exercises_df)
 # -----------------------------------------------------------------------------------
 
 FOLDER_ID = "1_hbAjm0oACHL4Qo73KBhgTEQrMXOhKMK"  # ID du dossier Google Drive
-directory = "data/tables"
+tables_directory = os.path.join(base_directory, "data", "tables")
 
-os.makedirs(directory, exist_ok=True)
+os.makedirs(tables_directory, exist_ok=True)
 
-sys.path.append(directory)
+sys.path.append(tables_directory)
 
 
 # Fonction pour télécharger un fichier Google Drive
 def download_file(file_id, file_name, local_directory):
     local_path = os.path.join(local_directory, file_name)
     if not os.path.exists(local_path):  # Vérifier si le fichier existe déjà
+        print(f"Téléchargement du fichier {file_name} depuis Google Drive...")
         url = f"https://drive.google.com/uc?id={file_id}&export=download"
         gdown.download(url, local_path, quiet=False)
-        print(f"Téléchargement du fichier : {file_name} terminé.")
+        print(f"Téléchargement du fichier {file_name} terminé.")
     else:
         print(f"Le fichier {file_name} existe déjà, il n'a pas été téléchargé.")
 
@@ -107,7 +111,7 @@ try:
     else:
         for file in files:
             print(f"Téléchargement du fichier : {file['name']}...")
-            download_file(file["id"], file["name"], directory)
+            download_file(file["id"], file["name"], tables_directory)
         print("Tous les fichiers ont été téléchargés.")
 except Exception as e:
     print(f"Une erreur est survenue : {e}")
@@ -118,9 +122,9 @@ except Exception as e:
 # -----------------------------------------------------------------------------------
 
 results = {}
-python_files = [f for f in os.listdir(directory) if f.endswith(".py")]
+python_files = [f for f in os.listdir(tables_directory) if f.endswith(".py")]
 
-for filename in os.listdir(directory):
+for filename in os.listdir(tables_directory):
     if filename.endswith(".py"):
         module_name = filename[:-3]  # Retirer l'extension .py
         module_path = f"{module_name}"  # Utiliser le nom du fichier sans l'extension
@@ -130,5 +134,24 @@ for filename in os.listdir(directory):
             module.make_df(con)
         except ModuleNotFoundError as e:
             print(f"Module {module_path} introuvable: {e}")
+
+
+
+python_files = [f for f in os.listdir(tables_directory) if f.endswith(".py")]
+if python_files:
+    for filename in python_files:
+        module_name = filename[:-3]  # Retirer l'extension .py
+        module_path = f"{module_name}"  # Utiliser le nom du fichier sans l'extension
+        try:
+            print(f"Importation du module {module_path}...")
+            module = importlib.import_module(module_path)
+            module.make_df(con)
+        except ModuleNotFoundError as e:
+            print(f"Module {module_path} introuvable: {e}")
+        except Exception as e:
+            print(f"Erreur lors de l'importation du module {module_path}: {e}")
+else:
+    print("Aucun fichier Python trouvé dans le répertoire.")
+
 
 con.close()
