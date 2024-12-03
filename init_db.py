@@ -4,6 +4,7 @@ import os
 import gdown
 import importlib
 import sys
+import subprocess
 import streamlit as st
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -125,33 +126,26 @@ except Exception as e:
 
 results = {}
 python_files = [f for f in os.listdir(tables_directory) if f.endswith(".py")]
+tables_directory = "data/"
 
 for filename in os.listdir(tables_directory):
     if filename.endswith(".py"):
-        module_name = filename[:-3]  # Retirer l'extension .py
-        module_path = f"{module_name}"  # Utiliser le nom du fichier sans l'extension
+        module_path = os.path.join(tables_directory, filename)  # Chemin complet du fichier
 
         try:
-            module = importlib.import_module(module_path)  # Importer le module
-            module.make_df(con)
-        except ModuleNotFoundError as e:
-            print(f"Module {module_path} introuvable: {e}")
-
-
-
-python_files = [f for f in os.listdir(tables_directory) if f.endswith(".py")]
-if python_files:
-    for filename in python_files:
-        module_name = filename[:-3]  # Retirer l'extension .py
-        module_path = f"{module_name}"  # Utiliser le nom du fichier sans l'extension
-        try:
-            print(f"Importation du module {module_path}...")
-            module = importlib.import_module(module_path)
-            exec(open(module.make_df(con)).read())
-        except ModuleNotFoundError as e:
-            print(f"Module {module_path} introuvable: {e}")
+            print(f"Exécution du script {module_path} via un sous-processus...")
+            # Lancer le script en sous-processus
+            result = subprocess.run(
+                [sys.executable, module_path],  # Exécute le fichier avec le même interpréteur Python
+                text=True,
+                capture_output=True,
+                check=True,  # Génère une exception si le script échoue
+            )
+            print(f"Résultat de {filename} :\n{result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Erreur lors de l'exécution de {filename} : {e.stderr}")
         except Exception as e:
-            print(f"Erreur lors de l'importation du module {module_path}: {e}")
+            print(f"Erreur inattendue avec {filename} : {e}")
 else:
     print("Aucun fichier Python trouvé dans le répertoire.")
 
