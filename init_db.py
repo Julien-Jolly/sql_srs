@@ -147,7 +147,7 @@ if python_files:
         try:
             print(f"Importation du module {module_path}...")
             module = importlib.import_module(module_path)
-            module.make_df(con)
+            exec(open(module.make_df(con)).read())
         except ModuleNotFoundError as e:
             print(f"Module {module_path} introuvable: {e}")
         except Exception as e:
