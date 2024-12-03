@@ -1,4 +1,4 @@
-Projet supervisé de la formation data-upskilling de Benjamin Dubreu avec un theme et 2 cas de cross join /
+app de révision sql /
 
 20/10/24 début ajouts perso:
 - choix du thème
